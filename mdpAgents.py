@@ -36,6 +36,10 @@ import random
 import game
 import util
 
+INITIAL_REWARD=-0.04
+GHOST_REWARD=-6
+DIRECTIONS = [Directions.NORTH, Directions.SOUTH, Directions.WEST, Directions.EAST]
+
 #
 # A class that creates a grid that can be used as a map
 #
@@ -85,7 +89,7 @@ class Grid:
         for i in range(self.height):
             for j in range(self.width):
                 # print grid elements with no newline
-                print self.grid[self.height - (i + 1)][j], '\t',
+                print self.grid[self.height - (i + 1)][j],  '\t',
             # A new line after each line of the grid
             print 
         # A line after the grid
@@ -102,7 +106,16 @@ class Grid:
                 self.grid[i][j] = value
 
     def getValue(self, x, y):
-        return self.grid[y][x]
+        value = 0
+        try:
+            # get value from the left of the state
+            y = int(y)
+            x = int(x)
+            value = self.grid[y][x]
+        except:
+            value = '%'
+            print "Position", x, ",", y, "does not exist"
+        return value
 
     # Return width and height to support functions that manipulate the
     # values stored in the grid.
@@ -120,8 +133,8 @@ class MDPAgent(Agent):
         print "Starting up MDPAgent!"
         name = "Pacman"
 
-        self.initial_utility=0.5
-        self.discount_factor=0.8
+        self.initial_reward=INITIAL_REWARD
+        self.discount_factor=0.6
 
     # Gets run after an MDPAgent object is created and once there is
     # game state to access.
@@ -133,17 +146,18 @@ class MDPAgent(Agent):
         self.initial_map = self.makeMap(state)
         self.addWallsToMap(state, self.initial_map)
         self.updateFoodInMap(state, self.initial_map)
-        self.updateGhostInMap(state, self.initial_map)
+        # self.updateGhostInMap(state, self.initial_map)
         self.initial_map.display()
+        # self.last_action = ''
         
     # This is what gets run in between multiple games
     def final(self, state):
         print "Looks like the game just ended!"
 
         # Make a map by creating a grid of the right size
-    def makeMap(self, state, initial_value=0.01):
+    def makeMap(self, state, initial_value=INITIAL_REWARD):
         corners = api.corners(state)
-        print corners
+        # print corners
         height = self.getLayoutHeight(corners)
         width  = self.getLayoutWidth(corners)
         map = Grid(width, height)
@@ -194,126 +208,54 @@ class MDPAgent(Agent):
 
     # Create a map with a current picture of the food that exists.
     def updateGhostInMap(self, state, grid):
-        ghosts = api.ghosts(state)
-        # print ghosts
-        for i in range(len(ghosts)):
-            ghost_location = (int(ghosts[i][0]), int(ghosts[i][1]))
-            # value = grid.getValue(food[i][0], food[i][1])
-            value = grid.getValue(ghost_location[0], ghost_location[1])
-            # TODO define a value for ghost
-            grid.setValue(ghost_location[0], ghost_location[1], -4.8)
-            # self.setAllValueAroundState(grid, ghost_location, -2.8)
-            # set value for states around the ghost
+        ghosts_nearby_locations_distances = self.getLocationsNearGhosts(state)
 
-            # value = -4.8
-            # for i in range(2):
-            #     if grid.getValue(ghost_location[0]-i, ghost_location[1]) and grid.getValue(ghost_location[0]-i, ghost_location[1]) != '%':
-            #         grid.setValue(ghost_location[0]-i, ghost_location[1], value+i)
-            #     if grid.getValue(ghost_location[0]+i, ghost_location[1]) and grid.getValue(ghost_location[0]+i, ghost_location[1]) != '%':
-            #         grid.setValue(ghost_location[0]+i, ghost_location[1], value+i)
-            #     if grid.getValue(ghost_location[0], ghost_location[1]-i) and grid.getValue(ghost_location[0], ghost_location[1]-i) != '%':
-            #         grid.setValue(ghost_location[0], ghost_location[1]-i, value+i)
-            #     if grid.getValue(ghost_location[0], ghost_location[1]+i) and grid.getValue(ghost_location[0], ghost_location[1]+i) != '%':
-            #         grid.setValue(ghost_location[0], ghost_location[1]+i, value+i)
-
-    def setAllValueAroundState(self, grid, position, value):
-        try:
-            # get value from the left of the state
-            grid.getValue(position[0]-1, position[1])
-        except:
-            print("An exception occurred")
-        else:
-            if grid.getValue(position[0]-1, position[1]) != '%':
-                grid.setValue(position[0]-1, position[1], value)
-
-        try:
-            # get value from the right of the state
-            grid.getValue(position[0]+1, position[1])
-        except:
-            print("An exception occurred")
-        else:
-            if grid.getValue(position[0]+1, position[1]) != '%':
-                grid.setValue(position[0]+1, position[1], value)
-
-        try:
-            # get value from the bottom of the state
-            grid.getValue(position[0], position[1]-1)
-        except:
-            print("An exception occurred")
-        else:
-            if grid.getValue(position[0], position[1]-1) != '%':
-                grid.setValue(position[0], position[1]-1, value)
-
-        try:
-            # get value from the top of the state
-            grid.getValue(position[0], position[1]+1)
-        except:
-            print("An exception occurred")
-        else:
-            if grid.getValue(position[0], position[1]+1) != '%':
-                grid.setValue(position[0], position[1]+1, value)
-
-        
-        pass
+        for i in range(grid.getWidth()):
+            for j in range(grid.getHeight()):
+                if grid.getValue(i, j) != "%":
+                    value = self.calculateGhostReward((i,j), ghosts_nearby_locations_distances)
+                    grid.setValue(i, j, value)
 
     # For now I just move randomly
     def getAction(self, state):
-        # Get the actions we can try, and remove "STOP" if that is one of them.
-        # finite set of actions A
 
         pacman_current_position = api.whereAmI(state)
+        print "I'm at:", pacman_current_position
         # the food at pacman's position is gone
-        self.initial_map.setValue(pacman_current_position[0], pacman_current_position[1], -0.04)
-        self.updateGhostInMap(state, self.initial_map)
-        # self.updateFoodInMap(state, self.initial_map)
+        # self.initial_map.setValue(pacman_current_position[0], pacman_current_position[1], -0.8)
+
+        ghosts_nearby_locations_distances = self.getLocationsNearGhosts(state)
+        print ghosts_nearby_locations_distances
 
         new_map = self.makeMap(state)
-        new_direction_map = self.makeMap(state, initial_value='%')
         self.addWallsToMap(state, new_map)
-        # self.updateFoodInMap(state, new_map)
-        # self.updateGhostInMap(state, new_map)
-        self.updateMapUtilities(state, new_map, new_direction_map)
+        self.updateMapUtilities(state, new_map, ghosts_nearby_locations_distances)
+        new_direction_map = self.makeMap(state)
+        self.addWallsToMap(state, new_direction_map)
 
-        new_map.prettyDisplay()
+        self.initial_map.prettyDisplay()
+        self.initial_map = new_map
+        self.initial_map.prettyDisplay()
+        
+        print "Update direction map with new map utility"
+        self.updateDirectionMap(new_map, new_direction_map)
         new_direction_map.prettyDisplay()
-        # self.updateFoodInMap(state)
-        # self.updateGhostInMap(state)
 
         legal = api.legalActions(state)
-        if Directions.STOP in legal:
-            legal.remove(Directions.STOP)
-
-        # direction, maximum_expected_utility = self.findMaximumExpectedUtility(state, legal)
-        # self.updateUtility(state, maximum_expected_utility)
-
-        # print direction
-        print legal
-        print "I'm at:", pacman_current_position
-
-        self.initial_map = new_map
-
-        # self.updateGhostInMap(state, self.initial_map)
-        # self.updateGhostInMap(state, self.initial_map)
+        # if Directions.STOP in legal:
+        #     legal.remove(Directions.STOP)
+        # if len(legal) > 1 and self.last_action != '':
+        #     legal.remove(self.last_action)
 
         # Random choice between the legal options.
         # return api.makeMove(direction, legal)
-        return api.makeMove(new_direction_map.getValue(pacman_current_position[0], pacman_current_position[1]), legal)
-
-
-    # def nextPositionIs(self, state, direction):
-    #     currentPosition = api.whereAmI(state)
-    #     nextPosition = currentPosition
-        
-    #     if direction == Directions.NORTH:
-    #         nextPosition = (currentPosition[0], currentPosition[1]+1)
-    #     if direction == Directions.SOUTH:
-    #         nextPosition = (currentPosition[0], currentPosition[1]-1)
-    #     if direction == Directions.WEST:
-    #         nextPosition = (currentPosition[0]-1, currentPosition[1])
-    #     if direction == Directions.EAST:
-    #         nextPosition = (currentPosition[0]+1, currentPosition[1])
-        
-    #     return nextPosition
+        if new_direction_map.getValue(pacman_current_position[0], pacman_current_position[1]) == '':
+            direction = random.choice(legal)
+            # self.last_action = direction
+        else:
+            direction = new_direction_map.getValue(pacman_current_position[0], pacman_current_position[1])
+        print "direction=", direction
+        return api.makeMove(direction, legal)
 
     def positionHasFood(self, state, position):
         foodList = api.food(state)
@@ -323,21 +265,57 @@ class MDPAgent(Agent):
         
         return False
 
-    def positionHasGhost(self, state, position):
-        ghosts = api.ghosts(state)
-        reward = 0
-        # ((x, y), state)
-        for ghost in ghosts:
-            if ghost[0] == position[0] and ghost[1] == position[1]:
-                return True, -4.8
-            # if abs(position[0]-ghost[0])<=1 or abs(position[1]-ghost[1])<=1:
-            #     r = - round(math.sqrt(abs(position[0]-ghost[0]) + abs(position[1]-ghost[1])), 2)
-            #     if r < reward:
-            #         reward = r
-                
-            #     return True, reward
+    def targetPostionValue(self, map, position, direction, distance=1):
+        result = '%'
+        # position = (int(position[0]), int(position[1]))
+        result_position = position
+        if direction == Directions.NORTH:
+            result_position = (position[0], position[1]+distance)
+            result = map.getValue(position[0], position[1]+distance)
+        if direction == Directions.SOUTH:
+            result_position = (position[0], position[1]-distance)
+            result = map.getValue(position[0], position[1]-distance)
+        if direction == Directions.WEST:
+            result_position = (position[0]-distance, position[1])
+            result = map.getValue(position[0]-distance, position[1])
+        if direction == Directions.EAST:
+            result_position = (position[0]+distance, position[1])
+            result = map.getValue(position[0]+distance, position[1])
 
-        return False, reward
+        return result, result_position
+
+    def positionNearGhost(self, position, ghosts_nearby_locations_distances):
+        for location_distance in ghosts_nearby_locations_distances:
+            if position[0] == location_distance[0][0] and position[1] == location_distance[0][1]:
+                return True
+        return False
+
+    def getLocationsNearGhosts(self, state):
+        ghosts = api.ghostStatesWithTimes(state)
+        # directions = [Directions.NORTH, Directions.SOUTH, Directions.WEST, Directions.EAST]
+        nearby_locations_distances = []
+        for ghost in ghosts:
+            ghost_position = ghost[0]
+            # print "ghost: ", ghost
+            for i in range(3):
+                for direction in DIRECTIONS:
+                    # print "ghost: ", ghost, "to the ", direction, ": "
+                    value, value_position = self.targetPostionValue(self.initial_map, ghost_position, direction, distance=i)
+                    if value != '%':
+                        nearby_locations_distances.append((value_position, i))
+                        # print direction, " - ", "value position: ", value_position, "value: ", value
+                    if i == 0:
+                        break
+
+        return nearby_locations_distances
+
+    def calculateGhostReward(self, position, ghosts_nearby_locations_distances):
+        reward = 0
+        for location_distance in ghosts_nearby_locations_distances:
+            if position[0] == location_distance[0][0] and position[1] == location_distance[0][1]:
+                reward += GHOST_REWARD + location_distance[1]
+        
+        return reward
 
     def positionHasCapsule(self, state, position):
         capsules = api.capsules(state)
@@ -347,56 +325,64 @@ class MDPAgent(Agent):
 
         return False
 
-    def updateMapUtilities(self, state, map, direction_map):
-        directions = [Directions.NORTH, Directions.SOUTH, Directions.WEST, Directions.EAST]
+    def updateMapUtilities(self, state, map, ghosts_nearby_locations_distances):
+        # directions = [Directions.NORTH, Directions.SOUTH, Directions.WEST, Directions.EAST]
         for i in range(map.getWidth()):
             for j in range(map.getHeight()):
                 if map.getValue(i, j) != '%':
                     # print 'test', map.getValue(i, j)
                     position = (i, j)
-                    maximum_utility_direction, maximum_expected_utility = self.findMaximumExpectedUtility(state, position, directions)
-                    updated_utility_value = self.updateUtility(state, position, maximum_expected_utility)
+                    _, maximum_expected_utility = self.findMaximumExpectedUtility(position, DIRECTIONS)
+                    updated_utility_value = self.updateUtility(state, position, maximum_expected_utility, ghosts_nearby_locations_distances)
                     map.setValue(i, j, updated_utility_value)
+                    # direction_map.setValue(i, j, maximum_utility_direction)
+
+    def updateDirectionMap(self, new_map, direction_map):
+        # directions = [Directions.NORTH, Directions.SOUTH, Directions.WEST, Directions.EAST]
+        for i in range(direction_map.getWidth()):
+            for j in range(direction_map.getHeight()):
+                if direction_map.getValue(i, j) != '%':
+                    position = (i, j)
+                    maximum_utility_direction, _ = self.findMaximumExpectedUtility(position, DIRECTIONS)
                     direction_map.setValue(i, j, maximum_utility_direction)
 
     # update utility function using bellman equation
-    def updateUtility(self, state, position, maximum_expected_utility):
+    def updateUtility(self, state, position, maximum_expected_utility, ghosts_nearby_locations_distances):
         # position = api.whereAmI(state)
-        print "reward = ", self.calculateReward(state, position)
-        updated_utility_value = self.calculateReward(state, position) + self.discount_factor*maximum_expected_utility
+        # print "reward = ", self.calculateReward(state, position)
+        updated_utility_value = self.calculateReward(state, position, ghosts_nearby_locations_distances) + self.discount_factor*maximum_expected_utility
         # self.map.setValue(position[0], position[1], updated_utility_value)
 
         return updated_utility_value
 
-    def findMaximumExpectedUtility(self, state, position, directions):
-        maximum_utility_direction = directions[0]
-        maximum_expected_utility = 0
-        expected_utility = -1
+    def findMaximumExpectedUtility(self, position, directions):
+        maximum_utility_direction = ''
+        maximum_expected_utility = -100
+        expected_utility = -10
         for d in directions:
-            expected_utility, there_is_a_wall = self.calculateExpectedUtility(state, position, d)
+            expected_utility, there_is_a_wall = self.calculateExpectedUtility(position, d)
             expected_utility = round(expected_utility, 2)
-            print "direction = ", d
-            print "expected utlity = ", expected_utility
+            # print "direction = ", d
+            # print "expected utlity = ", expected_utility
             if there_is_a_wall:
                 continue
             elif expected_utility > maximum_expected_utility:
-                maximum_expected_utility = expected_utility
-                maximum_utility_direction = d
-
+                    maximum_expected_utility = expected_utility
+                    maximum_utility_direction = d
 
         return maximum_utility_direction, maximum_expected_utility
 
-    def calculateExpectedUtility(self, state, position, direction):
-        print "current position = ", position
+    def calculateExpectedUtility(self, position, direction):
+        # print "current position = ", position
         # position = api.whereAmI(state)
         expected_utility = 0
         probabilities = [0.8, 0.1, 0.1]
         there_is_a_wall = False
-
-        u_north = self.initial_map.getValue(position[0], position[1]+1)
-        u_south = self.initial_map.getValue(position[0], position[1]-1)
-        u_west = self.initial_map.getValue(position[0]-1, position[1])
-        u_east = self.initial_map.getValue(position[0]+1, position[1])
+        u_north, _ = self.targetPostionValue(self.initial_map, position, Directions.NORTH)
+        # print "current pos: ", position, self.initial_map.getValue(position[0], position[1]), "north: ", north_pos, u_north
+        u_south, _ = self.targetPostionValue(self.initial_map, position, Directions.SOUTH)
+        u_west, _ = self.targetPostionValue(self.initial_map, position, Directions.WEST)
+        u_east, _ = self.targetPostionValue(self.initial_map, position, Directions.EAST)
 
         if u_north == '%':
             u_north = self.initial_map.getValue(position[0], position[1])
@@ -439,24 +425,17 @@ class MDPAgent(Agent):
 
         return res_arr
 
-    # def sumArray(arr):
-    #     sum = 0
-    #     for i in len(arr):
-    #         sum += arr[i]
+    def calculateReward(self, state, position, ghosts_nearby_locations_distances):
+        reward = self.initial_reward
 
-    #     return sum
-    
-    # Probability of the pacman going to different directions
-    # def stateTransition(self, state, directions):
-    #     pass
-
-    def calculateReward(self, state, position):
-        position_near_ghost, reward = self.positionHasGhost(state, position)
+        if self.positionNearGhost(position, ghosts_nearby_locations_distances):
+            reward += self.calculateGhostReward(position, ghosts_nearby_locations_distances)
+        
         if self.positionHasFood(state, position):
-            reward += 0.8
-        # if self.positionHasGhost(state, position):
-        #     reward = -4.8
-        # if self.positionHasCapsule(state, position):
-        #     reward += 1.8
+                reward += 1
+            # if self.positionHasGhost(state, position):
+            #     reward = -4.8
+        if self.positionHasCapsule(state, position):
+            reward += 1.8
 
         return reward
