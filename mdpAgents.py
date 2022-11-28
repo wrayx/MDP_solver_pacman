@@ -37,7 +37,6 @@ import game
 import util
 
 INITIAL_REWARD=-0.04
-GHOST_REWARD=-6
 DIRECTIONS = [Directions.NORTH, Directions.SOUTH, Directions.WEST, Directions.EAST]
 
 #
@@ -135,9 +134,9 @@ class MDPAgent(Agent):
 
         self.initial_reward=INITIAL_REWARD
         self.discount_factor=0.6
-        self.food_reward=0.8
-        self.capsule_reward=1.8
-        self.ghost_reward=GHOST_REWARD
+        self.food_reward=1.8
+        self.capsule_reward=2
+        self.ghost_reward=-6
 
     # Gets run after an MDPAgent object is created and once there is
     # game state to access.
@@ -150,7 +149,7 @@ class MDPAgent(Agent):
         self.addWallsToMap(state, self.initial_map)
         self.updateFoodInMap(state, self.initial_map)
         self.updateGhostInMap(state, self.initial_map)
-        self.initial_map.display()
+        self.initial_map.prettyDisplay()
         # self.last_action = ''
         
     # This is what gets run in between multiple games
@@ -222,7 +221,7 @@ class MDPAgent(Agent):
         for i in range(grid.getWidth()):
             for j in range(grid.getHeight()):
                 if grid.getValue(i, j) != "%":
-                    value = grid.getValue(i, j) + self.calculateGhostReward((i,j), ghosts_nearby_locations_distances)
+                    value = self.calculateGhostReward((i,j), ghosts_nearby_locations_distances)
                     grid.setValue(i, j, value)
 
     # For now I just move randomly
@@ -242,13 +241,13 @@ class MDPAgent(Agent):
         new_direction_map = self.makeMap(state)
         self.addWallsToMap(state, new_direction_map)
 
-        self.initial_map.prettyDisplay()
+        # self.initial_map.prettyDisplay()
         self.initial_map = new_map
         self.initial_map.prettyDisplay()
         
         print "Update direction map with new map utility"
         self.updateDirectionMap(new_direction_map)
-        new_direction_map.prettyDisplay()
+        # new_direction_map.prettyDisplay()
 
         legal = api.legalActions(state)
         # if Directions.STOP in legal:
@@ -264,6 +263,10 @@ class MDPAgent(Agent):
         else:
             direction = new_direction_map.getValue(pacman_current_position[0], pacman_current_position[1])
         
+        _, target_postion = self.targetPositionValue(self.initial_map, pacman_current_position, direction)
+        if self.calculateReward(state, target_postion, ghosts_nearby_locations_distances) < -5:
+            direction = Directions.STOP
+        
         print "result direction=", direction
         return api.makeMove(direction, legal)
 
@@ -275,7 +278,7 @@ class MDPAgent(Agent):
         
         return False
 
-    def targetPostionValue(self, map, position, direction, distance=1):
+    def targetPositionValue(self, map, position, direction, distance=1):
         result = '%'
         result_position = position
         if direction == Directions.NORTH:
@@ -299,29 +302,65 @@ class MDPAgent(Agent):
                 return True
         return False
 
+    def getDistance(self, position, ghost_postion):
+        return abs(position[0]-ghost_postion[0]) + abs(position[1]-ghost_postion[1])
+
     def getLocationsNearGhosts(self, state):
         ghosts = api.ghostStatesWithTimes(state)
         nearby_locations_distances = []
         for ghost in ghosts:
             ghost_position = ghost[0]
+            # from ghost[0]-i to ghost[1]+i
+            # for i in range(1, 3):
+            for i in range(self.initial_map.getWidth()):
+                for j in range(self.initial_map.getHeight()):
+                    distance = self.getDistance((i, j), ghost_position)
+                    if distance < 4:
+                        nearby_locations_distances.append(((i, j), distance, ghost[1]))
+
             # print "ghost: ", ghost
             for i in range(3):
                 for direction in DIRECTIONS:
-                    # print "ghost: ", ghost, "to the ", direction, ": "
-                    value, value_position = self.targetPostionValue(self.initial_map, ghost_position, direction, distance=i)
+                    print "ghost: ", ghost, "to the ", direction, ": "
+                    value, value_position = self.targetPositionValue(self.initial_map, ghost_position, direction, distance=i)
                     if value != '%':
-                        nearby_locations_distances.append((value_position, i))
+                        # if i > 1:
+                        find_wall = False
+                        for j in range(1,i):
+                            # if there is a wall in between the ghost and the pacman
+                            # then it is ok for pacman to be there
+                            v, vp = self.targetPositionValue(self.initial_map, ghost_position, direction, distance=j)
+                            if v == "%":
+                                print "find wall at: ", vp, "skip: ", value_position, direction
+                                find_wall = True
+                                break
+                        if find_wall:
+                            # continue
+                            for nearby_locations_distance in nearby_locations_distances:
+                                if nearby_locations_distance[0][0] == value_position[0] and nearby_locations_distance[0][1] == value_position[1]:
+                                    print "remove ", value_position
+                                    nearby_locations_distances.remove(nearby_locations_distance)
+                        # format: (position, distance to the ghost, scaredTime)
+                        # nearby_locations_distances.append((value_position, i, ghost[1]))
                         # print direction, " - ", "value position: ", value_position, "value: ", value
-                    if i == 0:
-                        break
+                    # if i == 0:
+                    #     break
 
         return nearby_locations_distances
 
     def calculateGhostReward(self, position, ghosts_nearby_locations_distances):
+        # TODO chansing eatable ghost
         reward = 0
         for location_distance in ghosts_nearby_locations_distances:
             if position[0] == location_distance[0][0] and position[1] == location_distance[0][1]:
-                reward += self.ghost_reward + location_distance[1]
+                distance_to_ghost = location_distance[1]
+                scaredTime = location_distance[2]
+                # print scaredTime
+                if scaredTime > 0:
+                    reward += scaredTime + self.food_reward
+                else:
+                    # nearby ghost has lower rewards
+                    reward += self.ghost_reward + distance_to_ghost
         
         return reward
 
@@ -382,10 +421,10 @@ class MDPAgent(Agent):
         expected_utility = 0
         probabilities = [0.8, 0.1, 0.1]
         there_is_a_wall = False
-        u_north, _ = self.targetPostionValue(self.initial_map, position, Directions.NORTH)
-        u_south, _ = self.targetPostionValue(self.initial_map, position, Directions.SOUTH)
-        u_west, _ = self.targetPostionValue(self.initial_map, position, Directions.WEST)
-        u_east, _ = self.targetPostionValue(self.initial_map, position, Directions.EAST)
+        u_north, _ = self.targetPositionValue(self.initial_map, position, Directions.NORTH)
+        u_south, _ = self.targetPositionValue(self.initial_map, position, Directions.SOUTH)
+        u_west, _ = self.targetPositionValue(self.initial_map, position, Directions.WEST)
+        u_east, _ = self.targetPositionValue(self.initial_map, position, Directions.EAST)
 
         if u_north == '%':
             u_north = self.initial_map.getValue(position[0], position[1])
@@ -433,9 +472,10 @@ class MDPAgent(Agent):
 
         if self.positionNearGhost(position, ghosts_nearby_locations_distances):
             reward += self.calculateGhostReward(position, ghosts_nearby_locations_distances)
-        if self.positionHasFood(state, position):
-                reward += self.food_reward
-        if self.positionHasCapsule(state, position):
-            reward += self.capsule_reward
+        else:
+            if self.positionHasFood(state, position):
+                    reward += self.food_reward
+            if self.positionHasCapsule(state, position):
+                reward += self.capsule_reward
 
         return reward
