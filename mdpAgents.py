@@ -134,7 +134,31 @@ class Grid:
 
 class MDPAgent(Agent):
 
-    # Constructor: this gets run when we first invoke pacman.py
+
+    # Constructor 
+    #
+    # Note that it creates variables including:
+    #
+    # an reward assigned when ever pacman stays on the map
+    # initial_reward: an reward assigned when ever pacman stays on the map
+    # food_reward: reward added to the location that contains food
+    # capsule_reward: reward added to the location that contains capsule
+    # edible_ghost_reward: reward added to the location that has an edible/scared ghost
+    # ghost_reward: a negative reward for location that has an active ghost
+    #
+    # discount_factor: a number between 0 and 1 that decides 
+    # the preference of the agent for current over future rewards
+    #
+    # iteration_threshold: when the change in values is below this iteration threshold, 
+    # stop the iteration
+    #
+    # self.total_food_num: variable for total number of food on map
+    #
+    # Grid elements are not restricted, so you can place whatever you
+    # like at each location. You just have to be careful how you
+    # handle the elements when you use them.
+    #
+    # this gets run when we first invoke pacman.py
     def __init__(self):
 
         # time the program for testing
@@ -159,7 +183,7 @@ class MDPAgent(Agent):
         # variable for total number of food on map
         self.total_food_num=0
 
-    # Gets run after an MDPAgent object is created and once there is
+    # The function gets run after an MDPAgent object is created and once there is
     # game state to access.
     def registerInitialState(self, state):
         print "Running register InitialState for MDPAgent!"
@@ -185,7 +209,7 @@ class MDPAgent(Agent):
         # get the total (initial) number of food from the map
         self.total_food_num = len(api.food(state))
         
-    # This is what gets run in between multiple games
+    # The function gets run in between multiple games
     def final(self, state):
         print "Looks like the game just ended!"
 
@@ -193,7 +217,8 @@ class MDPAgent(Agent):
         print"--- ", round((time.time() - self.start_time), 2), " seconds ---"
         print "final food reward = ", self.food_reward
 
-    # Make a map by creating a grid of the right size
+    # Function that makes a map by creating a grid of the right size
+    # 
     # an initial value can be assigned to all cells 
     # using the optional parameter 'initial_value'
     def makeMap(self, state, initial_value=INITIAL_REWARD):
@@ -279,25 +304,22 @@ class MDPAgent(Agent):
         ghosts_nearby_locations_distances = self.getLocationsNearGhosts(state)
         print ghosts_nearby_locations_distances
 
+        # ratio between the total number of food at the beginning of the game 
+        # and the current remaining number of food
         total_food_ratio = self.total_food_num / len(api.food(state))
         
-        # if len(api.food(state)) < 3:
-        #     self.food_reward = INITIAL_REWARD_FOOD + 3
-        # el
-        if total_food_ratio > 1:
-            # print "ADDITTIONAL FOOD REWARD!!", total_food_ratio
-            self.food_reward = INITIAL_REWARD_FOOD + (total_food_ratio/0.5)
-            self.capsule_reward = INITIAL_REWARD_CAPSULE + 1
-        # elif total_food_ratio > 3:
-        #     self.food_reward = INITIAL_REWARD_FOOD + 2
-        #     self.capsule_reward = INITIAL_REWARD_CAPSULE + 2
-        # elif total_food_ratio > 5:
-        #     self.food_reward = INITIAL_REWARD_FOOD + 3
-        #     self.capsule_reward = INITIAL_REWARD_CAPSULE + 3
-        
-
-        # if self.total_food_num / len(api.food(state)) > 2:
-        #     self.food_reward += 1.0
+        # update the food reward based on the remaining number of food. 
+        # so that when there is less food left, 
+        # pacman will try it best to finish the game as soon as it can
+        if total_food_ratio > 5:
+            self.food_reward = INITIAL_REWARD_FOOD + 3
+            # self.capsule_reward = INITIAL_REWARD_CAPSULE + 3
+        elif total_food_ratio > 3:
+            self.food_reward = INITIAL_REWARD_FOOD + 2
+            # self.capsule_reward = INITIAL_REWARD_CAPSULE + 2
+        elif total_food_ratio > 1:
+            self.food_reward = INITIAL_REWARD_FOOD + 1
+            # self.capsule_reward = INITIAL_REWARD_CAPSULE + 1
 
         # initialise the utility map
         self.utility_map.setAllValue(self.initial_reward)
@@ -308,7 +330,6 @@ class MDPAgent(Agent):
         # initialise the direction map
         self.direction_map.setAllValue("")
         self.addWallsToMap(state, self.direction_map)
-        # self.updateDirectionMap()
 
         # display the initial map
         self.utility_map.prettyDisplay()
@@ -352,6 +373,9 @@ class MDPAgent(Agent):
 
         return False
 
+    # Function to get a target position's value from the map 
+    # given a position and the next direction 
+    # e.g. what is the position's value to the south of (1,1) on utility map ?
     def targetPositionValue(self, map, position, direction, distance=1):
         result = '%'
         result_position = position
@@ -383,7 +407,7 @@ class MDPAgent(Agent):
 
     # Function to get all the locations that are near the ghost
     # which is also a list of locations that pacman should try to avoid
-
+    #
     # The returned value are formatted as follows: 
     # ((x, y), distance to the ghost, ghost edible time) 
     # the function so through each position on the map 
@@ -556,14 +580,6 @@ class MDPAgent(Agent):
             self.utility_map.prettyDisplay()
             print "================"
 
-    # def updateDirectionMap(self):
-    #     for i in range(self.direction_map.getWidth()):
-    #         for j in range(self.direction_map.getHeight()):
-    #             if self.direction_map.getValue(i, j) != '%':
-    #                 position = (i, j)
-    #                 maximum_utility_direction, _ = self.findMaximumExpectedUtility(position, DIRECTIONS)
-    #                 self.direction_map.setValue(i, j, maximum_utility_direction)
-
     # Function that calculate the utility value using Bellman equation
     def updateUtility(self, state, position, maximum_expected_utility, ghosts_nearby_locations_distances):
         # position = api.whereAmI(state)
@@ -609,16 +625,19 @@ class MDPAgent(Agent):
 
         return maximum_utility_direction, maximum_expected_utility
 
-    # Function that calculate the expected utility in the specified position and direction
+    # Function that calculate the expected utility at the specified position in the given direction
     def calculateExpectedUtility(self, position, direction):
         expected_utility = 0
         probabilities = [0.8, 0.1, 0.1]
         there_is_a_wall = False
+
+        # get the last iteration utility value at 4 different directions
         u_north, _ = self.targetPositionValue(self.utility_map, position, Directions.NORTH)
         u_south, _ = self.targetPositionValue(self.utility_map, position, Directions.SOUTH)
         u_west, _ = self.targetPositionValue(self.utility_map, position, Directions.WEST)
         u_east, _ = self.targetPositionValue(self.utility_map, position, Directions.EAST)
 
+        # if there is a wall in the given direction
         if u_north == '%':
             u_north = self.utility_map.getValue(position[0], position[1])
             if direction == Directions.NORTH:
