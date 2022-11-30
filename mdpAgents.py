@@ -286,14 +286,14 @@ class MDPAgent(Agent):
         # el
         if total_food_ratio > 1:
             # print "ADDITTIONAL FOOD REWARD!!", total_food_ratio
-            self.food_reward = INITIAL_REWARD_FOOD + 1
+            self.food_reward = INITIAL_REWARD_FOOD + (total_food_ratio/0.5)
             self.capsule_reward = INITIAL_REWARD_CAPSULE + 1
-        elif total_food_ratio > 3:
-            self.food_reward = INITIAL_REWARD_FOOD + 2
-            self.capsule_reward = INITIAL_REWARD_CAPSULE + 2
-        elif total_food_ratio > 5:
-            self.food_reward = INITIAL_REWARD_FOOD + 3
-            self.capsule_reward = INITIAL_REWARD_CAPSULE + 3
+        # elif total_food_ratio > 3:
+        #     self.food_reward = INITIAL_REWARD_FOOD + 2
+        #     self.capsule_reward = INITIAL_REWARD_CAPSULE + 2
+        # elif total_food_ratio > 5:
+        #     self.food_reward = INITIAL_REWARD_FOOD + 3
+        #     self.capsule_reward = INITIAL_REWARD_CAPSULE + 3
         
 
         # if self.total_food_num / len(api.food(state)) > 2:
@@ -492,44 +492,63 @@ class MDPAgent(Agent):
         return wall_num
 
     # Function that gives the reward for those positions that are near the ghost
-    # based on infomation including distance to the ghost and remaining scared time
+    # based on infomation including distance to the ghost and remaining scared time 
+    # 
+    # if the ghost is scared then a positive reward is assigned,
+    # otherwise an negative reward is assigned based on its distance to the ghost. 
+    # The closer to the ghost, lower reward (an even more negative value) is assigned.
     def calculateGhostReward(self, position, ghosts_nearby_locations_distances):
         reward = 0
         for location_distance in ghosts_nearby_locations_distances:
             if position[0] == location_distance[0][0] and position[1] == location_distance[0][1]:
                 distance_to_ghost = location_distance[1]
                 scaredTime = location_distance[2]
-                # print scaredTime
+                
                 if scaredTime > 2:
+                    # there are plenty of scared time, 
+                    # so an extra edible_ghost_reward is added. 
+                    # The distance is also involved here 
+                    # as if pacman is too far away from the ghost then there is no need to chase it
                     reward = self.edible_ghost_reward - (distance_to_ghost*0.5)
+                    # TODO testing required here
+                    # reward = self.edible_ghost_reward
                 elif scaredTime > 0:
                     reward = (distance_to_ghost*0.5)
                 else:
+                    # the ghost is not scared
                     # nearby ghost has lower rewards
                     reward += self.ghost_reward + (distance_to_ghost*0.5)
         
         return reward
 
+    # Function that updates the utility value from the self.utility_map 
+    # until all values on the map converges
     def updateMapUtilities(self, state, ghosts_nearby_locations_distances):
-
+        
+        # initially, the values are not converging
         converge = False
 
+        # continue the calculation until the value converges
         while not converge:
-        
+            
+            # calculate the utility value at each position
             for i in range(self.utility_map.getWidth()):
                 for j in range(self.utility_map.getHeight()):
                     if self.utility_map.getValue(i, j) != '%':
                         # print 'test', self.utility_map.getValue(i, j)
                         converge = True
                         position = (i, j)
+                        # calculate the maximum utility value, and the direction that lead to it
                         maximum_expected_utility_direction, maximum_expected_utility = self.findMaximumExpectedUtility(position, DIRECTIONS)
+                        # get new utility value for the current iteration
                         updated_utility_value = self.updateUtility(state, position, maximum_expected_utility, ghosts_nearby_locations_distances)
                         
-                        # testing convergence for each cell
+                        # testing convergence for the cell
                         if abs(updated_utility_value - self.utility_map.getValue(i, j)) > self.iteration_threshold:
                             # print "not converge yet"
                             converge = False
                         
+                        # fill new values onto the map
                         self.utility_map.setValue(i, j, updated_utility_value)
                         self.direction_map.setValue(i, j, maximum_expected_utility_direction)
             
@@ -537,15 +556,15 @@ class MDPAgent(Agent):
             self.utility_map.prettyDisplay()
             print "================"
 
-    def updateDirectionMap(self):
-        for i in range(self.direction_map.getWidth()):
-            for j in range(self.direction_map.getHeight()):
-                if self.direction_map.getValue(i, j) != '%':
-                    position = (i, j)
-                    maximum_utility_direction, _ = self.findMaximumExpectedUtility(position, DIRECTIONS)
-                    self.direction_map.setValue(i, j, maximum_utility_direction)
+    # def updateDirectionMap(self):
+    #     for i in range(self.direction_map.getWidth()):
+    #         for j in range(self.direction_map.getHeight()):
+    #             if self.direction_map.getValue(i, j) != '%':
+    #                 position = (i, j)
+    #                 maximum_utility_direction, _ = self.findMaximumExpectedUtility(position, DIRECTIONS)
+    #                 self.direction_map.setValue(i, j, maximum_utility_direction)
 
-    # update utility function using bellman equation
+    # Function that calculate the utility value using Bellman equation
     def updateUtility(self, state, position, maximum_expected_utility, ghosts_nearby_locations_distances):
         # position = api.whereAmI(state)
         # print "reward = ", self.calculateReward(state, position)
@@ -553,27 +572,36 @@ class MDPAgent(Agent):
 
         return updated_utility_value
 
+    # Function that find the maximum expected utility from different directions
+    # which returns the direction that gives the maximum expected utility and the utility value
     def findMaximumExpectedUtility(self, position, directions):
         maximum_utility_direction = ''
         maximum_expected_utility = -100
         expected_utility = -100
-        total_num_utilities = 0
-        equal_num_utilities = 0
+        # total_num_utilities = 0
+        # equal_num_utilities = 0
+
+        # loops through all directions
         for d in directions:
+            # calculate the expected utility in direction d
             expected_utility, there_is_a_wall = self.calculateExpectedUtility(position, d)
             # expected_utility = round(expected_utility, 2)
-            if expected_utility == maximum_expected_utility:
-                equal_num_utilities += 1
+            # if expected_utility == maximum_expected_utility:
+            #     equal_num_utilities += 1
             # print "direction = ", d
             # print "expected utlity = ", expected_utility
+            
+            # if there is a wall in direction, 
+            # then ignore this direction and continue the iteration
             if there_is_a_wall:
                 continue
             
+            # store the maximum expected utility value
             elif expected_utility > maximum_expected_utility:
                 maximum_expected_utility = expected_utility
                 maximum_utility_direction = d
             
-            total_num_utilities+=1
+            # total_num_utilities+=1
 
         # if utility to go all directions are the same
         # if total_num_utilities == equal_num_utilities:
@@ -581,6 +609,7 @@ class MDPAgent(Agent):
 
         return maximum_utility_direction, maximum_expected_utility
 
+    # Function that calculate the expected utility in the specified position and direction
     def calculateExpectedUtility(self, position, direction):
         expected_utility = 0
         probabilities = [0.8, 0.1, 0.1]
@@ -620,6 +649,8 @@ class MDPAgent(Agent):
 
         return expected_utility, there_is_a_wall
 
+    # Function that multiples each element of 2 arrays (with the same length) 
+    # and produce a result array
     def multiplyArray(self, arr1, arr2):
         # print arr1, arr2
         if len(arr1) != len(arr2):
@@ -631,16 +662,25 @@ class MDPAgent(Agent):
 
         return res_arr
 
+    # Function that culculate the reward value of the specified position
+    # 
+    # if the position is near the ghost then we assign the value 
+    # based on the information got from the function getLocationsNearGhosts() 
+    # and the function calculateGhostReward() that calculate the reward based on that. 
+    # otherwise a (partially) fixed reward is assigned to the position that contains food and capsule
     def calculateReward(self, state, position, ghosts_nearby_locations_distances):
 
         reward = self.initial_reward
 
+        # if the position nears the ghost
         if self.positionNearGhost(position, ghosts_nearby_locations_distances):
             reward += self.calculateGhostReward(position, ghosts_nearby_locations_distances)
         else:
+            # if position contains the food
             if self.positionHasFood(state, position):
                 # TODO modify food reward
                 reward += self.food_reward
+            # if position contains the capsule
             if self.positionHasCapsule(state, position):
                 reward += self.capsule_reward
 
