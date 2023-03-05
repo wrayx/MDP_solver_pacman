@@ -139,7 +139,6 @@ class MDPAgent(Agent):
     #
     # Note that it creates variables including:
     #
-    # an reward assigned when ever pacman stays on the map
     # initial_reward: an reward assigned when ever pacman stays on the map
     # food_reward: reward added to the location that contains food
     # capsule_reward: reward added to the location that contains capsule
@@ -199,7 +198,6 @@ class MDPAgent(Agent):
         self.addWallsToMap(state, self.utility_map)
         self.updateFoodInMap(state, self.utility_map)
         self.updateGhostInMap(state, self.utility_map)
-        self.utility_map.prettyDisplay()
 
         # Make a map of the right size for 
         # direction that gives maximum utility value
@@ -281,14 +279,14 @@ class MDPAgent(Agent):
     # Put every element in the list of ghosts into the map
     # the initial utility value is obtained by calculateGhostReward() function
     def updateGhostInMap(self, state, grid):
-
+        
+        # get locations and its subsequent distance around ghosts
         ghosts_nearby_locations_distances = self.getLocationsNearGhosts(state)
 
         for i in range(grid.getWidth()):
             for j in range(grid.getHeight()):
                 if grid.getValue(i, j) != "%":
-                    # grid.getValue(i, j) + 
-                    value = grid.getValue(i, j) + self.calculateGhostReward((i,j), ghosts_nearby_locations_distances)
+                    value = self.calculateGhostReward((i,j), ghosts_nearby_locations_distances)
                     grid.setValue(i, j, value)
 
     # Function that gives pacman a direction to go on to the next state
@@ -296,13 +294,13 @@ class MDPAgent(Agent):
 
         # get the current position of the pacman
         pacman_current_position = api.whereAmI(state)
-        print "I'm at:", pacman_current_position
+        # print "I'm at:", pacman_current_position
 
         # get locations to avoid that are near the ghost
         # with additional information 
         # including it's distance to the ghost and ghost's scared time
         ghosts_nearby_locations_distances = self.getLocationsNearGhosts(state)
-        print ghosts_nearby_locations_distances
+        # print ghosts_nearby_locations_distances
 
         # ratio between the total number of food at the beginning of the game 
         # and the current remaining number of food
@@ -312,14 +310,14 @@ class MDPAgent(Agent):
         # so that when there is less food left, 
         # pacman will try it best to finish the game as soon as it can
         if total_food_ratio > 5:
-            self.food_reward = INITIAL_REWARD_FOOD + 3
-            # self.capsule_reward = INITIAL_REWARD_CAPSULE + 3
+            self.food_reward = INITIAL_REWARD_FOOD + 4
+            # self.food_reward = math.pow(INITIAL_REWARD_FOOD, 4)
         elif total_food_ratio > 3:
             self.food_reward = INITIAL_REWARD_FOOD + 2
-            # self.capsule_reward = INITIAL_REWARD_CAPSULE + 2
+            # self.food_reward = math.pow(INITIAL_REWARD_FOOD, 3)
         elif total_food_ratio > 1:
-            self.food_reward = INITIAL_REWARD_FOOD + 1
-            # self.capsule_reward = INITIAL_REWARD_CAPSULE + 1
+            self.food_reward = INITIAL_REWARD_FOOD + 1 
+            # self.food_reward = math.pow(INITIAL_REWARD_FOOD, 2)
 
         # initialise the utility map
         self.utility_map.setAllValue(self.initial_reward)
@@ -332,18 +330,19 @@ class MDPAgent(Agent):
         self.addWallsToMap(state, self.direction_map)
 
         # display the initial map
-        self.utility_map.prettyDisplay()
+        # self.utility_map.prettyDisplay()
 
         # value iteration for the map
         self.updateMapUtilities(state, ghosts_nearby_locations_distances)
 
         # display the current map
         # self.utility_map.prettyDisplay()
-        self.direction_map.prettyDisplay()
+        # self.direction_map.prettyDisplay()
 
+        # get a set of legal action
         legal = api.legalActions(state)
-        # if Directions.STOP in legal:
-        #     legal.remove(Directions.STOP)
+        if Directions.STOP in legal:
+            legal.remove(Directions.STOP)
 
         # Random choice between the legal options.
         # return api.makeMove(direction, legal)
@@ -352,7 +351,7 @@ class MDPAgent(Agent):
         else:
             direction = self.direction_map.getValue(pacman_current_position[0], pacman_current_position[1])
 
-        print "result direction =", direction
+        # print "result direction =", direction
         return api.makeMove(direction, legal)
 
     # Function to get whether an known position contains food
@@ -448,7 +447,7 @@ class MDPAgent(Agent):
                                 # if distance is nearer here
                                 if nearby_locations_distance[1] > distance:
                                     nearby_locations_distance = ((i, j), distance, ghost[1])
-                                    print "location repeated!", (i, j)
+                                    # print "location repeated!", (i, j)
                                     break
                         
                         # add this new location to the list 
@@ -530,14 +529,10 @@ class MDPAgent(Agent):
                 
                 if scaredTime > 2:
                     # there are plenty of scared time, 
-                    # so an extra edible_ghost_reward is added. 
-                    # The distance is also involved here 
-                    # as if pacman is too far away from the ghost then there is no need to chase it
-                    reward = self.edible_ghost_reward - (distance_to_ghost*0.5)
-                    # TODO testing required here
-                    # reward = self.edible_ghost_reward
+                    # so an edible_ghost_reward is assigned. 
+                    reward = self.edible_ghost_reward
                 elif scaredTime > 0:
-                    reward = (distance_to_ghost*0.5)
+                    reward = self.edible_ghost_reward*0.5
                 else:
                     # the ghost is not scared
                     # nearby ghost has lower rewards
@@ -577,8 +572,8 @@ class MDPAgent(Agent):
                         self.direction_map.setValue(i, j, maximum_expected_utility_direction)
             
             # print "not converge yet"
-            self.utility_map.prettyDisplay()
-            print "================"
+            # self.utility_map.prettyDisplay()
+            # print "================"
 
     # Function that calculate the utility value using Bellman equation
     def updateUtility(self, state, position, maximum_expected_utility, ghosts_nearby_locations_distances):
@@ -594,18 +589,11 @@ class MDPAgent(Agent):
         maximum_utility_direction = ''
         maximum_expected_utility = -100
         expected_utility = -100
-        # total_num_utilities = 0
-        # equal_num_utilities = 0
 
         # loops through all directions
         for d in directions:
             # calculate the expected utility in direction d
             expected_utility, there_is_a_wall = self.calculateExpectedUtility(position, d)
-            # expected_utility = round(expected_utility, 2)
-            # if expected_utility == maximum_expected_utility:
-            #     equal_num_utilities += 1
-            # print "direction = ", d
-            # print "expected utlity = ", expected_utility
             
             # if there is a wall in direction, 
             # then ignore this direction and continue the iteration
@@ -616,12 +604,6 @@ class MDPAgent(Agent):
             elif expected_utility > maximum_expected_utility:
                 maximum_expected_utility = expected_utility
                 maximum_utility_direction = d
-            
-            # total_num_utilities+=1
-
-        # if utility to go all directions are the same
-        # if total_num_utilities == equal_num_utilities:
-        #     maximum_utility_direction = ''
 
         return maximum_utility_direction, maximum_expected_utility
 
@@ -697,7 +679,6 @@ class MDPAgent(Agent):
         else:
             # if position contains the food
             if self.positionHasFood(state, position):
-                # TODO modify food reward
                 reward += self.food_reward
             # if position contains the capsule
             if self.positionHasCapsule(state, position):
