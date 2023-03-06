@@ -1,4 +1,13 @@
-### Coursework set-up
+# Pacman MDP-solver
+<div align='center'>
+<img src="images/smallGrid.png" width="300">
+<!-- <figcaption>Small Grid</figcaption> -->
+</div>
+<p align='center'>
+<img src="images/mediumClassic.png" width="500">
+</p>
+
+## Coursework set-up
 
 Code is written in Python 2.7
 
@@ -11,7 +20,7 @@ pyenv install 2.7
 
 # This creates a .python-version file which tells pyenv 
 # which version of python to run in that directory.
-pyenv local 3.6.0
+pyenv local 2.7
 
 # Or you can set a global python version
 # Load pyenv automatically by appending
@@ -33,7 +42,7 @@ python pacman.py -q -n 25 -p MDPAgent -l smallGrid
 python pacman.py -q -n 25 -p MDPAgent -l mediumClassic
 ```
 
-### More info
+## More info
 
 This coursework consist of writing code to control Pacman and win games using an MDP-solver. For each move, we model the Pacman’s world, which consists of all the elements of a Markov Decision Process.
 
